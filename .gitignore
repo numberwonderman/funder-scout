@@ -1,0 +1,8 @@
+.DS_Store
+.venv/
+agent-service/.venv/
+agent-service/.env
+work/
+laravel-app/.env
+laravel-app/vendor/
+laravel-app/storage/logs/*.log

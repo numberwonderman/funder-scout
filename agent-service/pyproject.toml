@@ -1,0 +1,18 @@
+[project]
+name = "funder-scout-agent-service"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.34",
+  "pydantic>=2.10",
+  "strands-agents>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["httpx>=0.28", "pytest>=8", "pytest-asyncio>=0.25"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+

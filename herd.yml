@@ -1,0 +1,7 @@
+name: funder-scout
+php: '8.4'
+root: laravel-app/public
+services:
+  postgresql: latest
+  redis: latest
+

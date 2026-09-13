@@ -1,0 +1,5 @@
+@extends('layouts.app', ['title' => 'Campaigns · Kindred'])
+@section('content')
+<section class="page-intro"><div><span class="eyebrow">Campaigns</span><h1>Your fundraising work</h1><p class="lede">Review each campaign and its latest research outcome.</p></div><a class="button" href="{{ route('research.index') }}">New research</a></section>
+<section class="section"><div class="panel table-wrap"><table class="data-table"><thead><tr><th>Campaign</th><th>Organization</th><th>Goal</th><th>Latest run</th><th></th></tr></thead><tbody>@forelse($campaigns as $campaign) @php($run=$campaign->researchRuns->first()) <tr><td><strong>{{ $campaign->title }}</strong><small>{{ Str::limit($campaign->description, 90) }}</small></td><td>{{ $campaign->organization->name }}</td><td>${{ number_format($campaign->goal_amount) }}</td><td>{{ $run ? str_replace('_', ' ', $run->status->value) : 'Not researched' }}</td><td>@if($run)<a href="{{ route('research.show', $run) }}">View →</a>@endif</td></tr>@empty<tr><td colspan="5" class="empty">No campaigns yet. Start research to create one.</td></tr>@endforelse</tbody></table></div></section>
+@endsection

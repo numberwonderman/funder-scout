@@ -1,0 +1,6 @@
+@extends('layouts.app', ['title' => 'Application workspace · Kindred'])
+@section('content')
+<a class="back" href="{{ route('prospects.show',$prospect) }}">← {{ $prospect->name }}</a>
+<span class="eyebrow">Application workspace</span><h1>{{ $prospect->grant_title ?: $prospect->name }}</h1><p class="lede">Reusable organizational material assembled from your stored profile. Missing information is flagged rather than invented.</p>
+<div class="grid two section"><section class="panel panel-pad"><h2>Organization material</h2><div class="agent-row"><span>Mission</span><b>{{ $workspace->content['mission'] ?: 'Missing' }}</b></div><div class="agent-row"><span>Programs</span><b>{{ implode(', ',$workspace->content['programs'] ?? []) ?: 'Missing' }}</b></div><div class="agent-row"><span>Annual budget</span><b>{{ $workspace->content['annual_budget'] ? '$'.number_format($workspace->content['annual_budget']) : 'Missing' }}</b></div></section><section class="panel panel-pad"><h2>Information needed</h2><ul class="plain-list">@foreach($workspace->content['missing'] ?? [] as $item)<li>{{ $item }}</li>@endforeach</ul><div class="notice" style="margin-top:20px">Draft answers must be reviewed by a human. Kindred never submits an application automatically.</div></section></div>
+@endsection
