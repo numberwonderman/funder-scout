@@ -106,6 +106,11 @@ class ResearchPipeline:
         fourth = builder.add_node(synthesizer, node_id=NODES[3][0])
         builder.add_edge(first, second)
         builder.add_edge(first, third)
+        # people_researcher must see evidence_researcher's evidence-backed
+        # funder candidates (per its own prompt) rather than only the initial
+        # campaign brief, or it has no candidates to find decision-makers for
+        # and every extracted person gets dropped by the provenance gate.
+        builder.add_edge(second, third)
         builder.add_edge(second, fourth)
         builder.add_edge(third, fourth)
         builder.set_entry_point(NODES[0][0])

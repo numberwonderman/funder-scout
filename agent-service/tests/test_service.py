@@ -67,6 +67,7 @@ def test_live_pipeline_builds_a_real_bounded_strands_graph(monkeypatch):
     } == {
         ("campaign_analyst", "evidence_researcher"),
         ("campaign_analyst", "people_researcher"),
+        ("evidence_researcher", "people_researcher"),
         ("evidence_researcher", "synthesizer"),
         ("people_researcher", "synthesizer"),
     }
