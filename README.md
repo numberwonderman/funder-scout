@@ -1,7 +1,7 @@
 # Funder Scout
 
-
 **Team:** Brett and Franklin Loeb ([@numberwonderman](https://github.com/numberwonderman)) — Agents for Humans Hackathon entry.
+
 > Current status: validated organization-scoped workspace build. See [KNOWN_LIMITATIONS.md](KNOWN_LIMITATIONS.md) before deployment.
 
 > Tell us what you are trying to fund. Our agents find who is most likely to
