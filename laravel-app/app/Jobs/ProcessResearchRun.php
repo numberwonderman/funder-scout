@@ -36,7 +36,12 @@ class ProcessResearchRun implements ShouldQueue
             ['status' => 'running', 'message' => 'Understanding campaign fit and exclusions.', 'metadata' => []],
         );
         try {
-            $payload = $client->research($run);
+            $payload = $client->research($run, function (string $node, string $status, string $message) use ($run): void {
+                $run->events()->updateOrCreate(
+                    ['node' => $node],
+                    ['status' => $status, 'message' => $message, 'metadata' => []],
+                );
+            });
             $ingestor->ingest($run, $crm->enrich($payload));
         } catch (Throwable $exception) {
             $this->failed($exception);
@@ -47,9 +52,14 @@ class ProcessResearchRun implements ShouldQueue
 
     public function failed(?Throwable $exception): void
     {
-        $serviceDetail = $exception instanceof RequestException
-            ? (string) $exception->response?->json('detail', '')
-            : '';
+        $serviceDetail = match (true) {
+            $exception instanceof RequestException => (string) $exception->response?->json('detail', ''),
+            // Live-mode streaming errors from the agent service arrive as a
+            // plain RuntimeException carrying the same "[failure_code]" text
+            // that used to live in a RequestException's JSON body.
+            $exception instanceof \RuntimeException => $exception->getMessage(),
+            default => '',
+        };
         $message = match (true) {
             $exception instanceof QueryException => 'The research queue was temporarily unavailable. No results were saved.',
             $exception instanceof ConnectionException => 'The research service could not be reached. No results were saved.',

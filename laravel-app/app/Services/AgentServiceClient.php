@@ -23,7 +23,10 @@ class AgentServiceClient
             ->retry(3, 350, fn (Throwable $exception): bool => $exception instanceof ConnectionException);
     }
 
-    public function research(ResearchRun $run): array
+    /**
+     * @param  (callable(string $node, string $status, string $message): void)|null  $onProgress
+     */
+    public function research(ResearchRun $run, ?callable $onProgress = null): array
     {
         $campaign = $run->campaign->load('organization');
 
@@ -39,7 +42,7 @@ class AgentServiceClient
         ];
 
         try {
-            return $this->client()->post('/research', $payload)->throw()->json();
+            return $this->streamResearch($payload, $onProgress);
         } catch (ConnectionException $exception) {
             try {
                 return $this->runLocalAgent($payload, (bool) config('services.agent.demo_mode'));
@@ -47,6 +50,55 @@ class AgentServiceClient
                 throw $exception;
             }
         }
+    }
+
+    /**
+     * Live mode streams newline-delimited progress/result/error events so the
+     * caller can persist each research node's completion as it actually
+     * happens, instead of learning about all of them at once when the whole
+     * bounded graph finishes. Demo mode (and any other plain JSON response,
+     * such as an auth failure) is read the normal, buffered way.
+     *
+     * @param  (callable(string $node, string $status, string $message): void)|null  $onProgress
+     */
+    protected function streamResearch(array $payload, ?callable $onProgress): array
+    {
+        $response = $this->client()->withOptions(['stream' => true])->post('/research', $payload);
+
+        if (! str_contains((string) $response->header('Content-Type'), 'application/x-ndjson')) {
+            return $response->throw()->json();
+        }
+
+        $body = $response->toPsrResponse()->getBody();
+        $buffer = '';
+        $result = null;
+
+        while (! $body->eof()) {
+            $buffer .= $body->read(8192);
+            while (($newlinePosition = strpos($buffer, "\n")) !== false) {
+                $line = trim(substr($buffer, 0, $newlinePosition));
+                $buffer = substr($buffer, $newlinePosition + 1);
+                if ($line === '') {
+                    continue;
+                }
+                $event = json_decode($line, true);
+                if (! is_array($event)) {
+                    continue;
+                }
+                match ($event['type'] ?? null) {
+                    'progress' => $onProgress?->__invoke((string) $event['node'], (string) ($event['status'] ?? 'completed'), (string) ($event['message'] ?? '')),
+                    'result' => $result = $event['response'] ?? null,
+                    'error' => throw new RuntimeException((string) ($event['detail'] ?? 'Live Strands research failed closed [unknown]')),
+                    default => null,
+                };
+            }
+        }
+
+        if (! is_array($result)) {
+            throw new RuntimeException('The research service closed its stream without producing a result.');
+        }
+
+        return $result;
     }
 
     public function enrichOrganization(Organization $organization): array

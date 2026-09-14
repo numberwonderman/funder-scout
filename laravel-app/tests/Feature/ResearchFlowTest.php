@@ -157,6 +157,56 @@ class ResearchFlowTest extends TestCase
         $this->assertDatabaseCount('prospects', 0);
     }
 
+    public function test_streamed_research_persists_each_node_progress_as_it_arrives(): void
+    {
+        config(['services.agent.demo_mode' => false]);
+        $this->post('/research', ['organization_name' => 'Water Partners', 'website' => 'https://water.example.org', 'campaign_title' => 'Drill wells', 'description' => 'Safe water in Malawi.', 'goal_amount' => 10000]);
+        $run = ResearchRun::firstOrFail();
+
+        $ndjson = implode("\n", [
+            json_encode(['type' => 'progress', 'node' => 'campaign_analyst', 'status' => 'completed', 'message' => 'Understanding campaign fit and exclusions.']),
+            json_encode(['type' => 'progress', 'node' => 'evidence_researcher', 'status' => 'completed', 'message' => 'Verifying funders and grants.']),
+            json_encode(['type' => 'result', 'response' => ['research_run_id' => $run->uuid, 'mode' => 'live']]),
+        ])."\n";
+
+        Http::fake([
+            rtrim((string) config('services.agent.url'), '/').'/*' => Http::response($ndjson, 200, ['Content-Type' => 'application/x-ndjson']),
+        ]);
+
+        $seen = [];
+        $result = (new AgentServiceClient)->research($run, function (string $node, string $status, string $message) use (&$seen): void {
+            $seen[] = [$node, $status, $message];
+        });
+
+        $this->assertSame(['research_run_id' => $run->uuid, 'mode' => 'live'], $result);
+        $this->assertSame([
+            ['campaign_analyst', 'completed', 'Understanding campaign fit and exclusions.'],
+            ['evidence_researcher', 'completed', 'Verifying funders and grants.'],
+        ], $seen);
+    }
+
+    public function test_streamed_research_error_line_fails_closed_with_matching_diagnosis(): void
+    {
+        config(['services.agent.demo_mode' => false]);
+        $this->post('/research', ['organization_name' => 'Water Partners', 'website' => 'https://water.example.org', 'campaign_title' => 'Drill wells', 'description' => 'Safe water in Malawi.', 'goal_amount' => 10000]);
+        $run = ResearchRun::firstOrFail();
+
+        $ndjson = json_encode(['type' => 'error', 'detail' => 'Live Strands research failed closed [timeout]'])."\n";
+
+        Http::fake([
+            rtrim((string) config('services.agent.url'), '/').'/*' => Http::response($ndjson, 200, ['Content-Type' => 'application/x-ndjson']),
+        ]);
+
+        try {
+            (new AgentServiceClient)->research($run);
+            $this->fail('Expected the streamed error line to raise.');
+        } catch (\RuntimeException $exception) {
+            (new ProcessResearchRun($run->id))->failed($exception);
+        }
+
+        $this->assertSame('The research service exceeded its configured deadline. No results were saved.', $run->refresh()->failure_message);
+    }
+
     public function test_live_research_uses_local_strands_pipeline_when_fastapi_is_unreachable(): void
     {
         config(['services.agent.demo_mode' => false]);

@@ -133,7 +133,7 @@ async def test_valid_output_is_promoted_scored_and_returned(monkeypatch):
     pipeline = ResearchPipeline()
     monkeypatch.setenv("DEMO_MODE", "false")
     mock_context(monkeypatch, pipeline)
-    monkeypatch.setattr(pipeline, "_invoke_graph", lambda task, request: asyncio.sleep(0, result=fake_graph_result(json.dumps(valid_payload()))))
+    monkeypatch.setattr(pipeline, "_invoke_graph", lambda task, request, on_progress=None: asyncio.sleep(0, result=fake_graph_result(json.dumps(valid_payload()))))
     result = await pipeline.run(REQUEST)
     assert [item.name for item in result.prospects] == ["Rotary Water Fund"]
     assert result.prospects[0].score_signals.cause_alignment == 1
@@ -151,7 +151,7 @@ async def test_irrelevant_organization_fails_closed(monkeypatch):
     payload["prospects"][0]["claims"][0]["claim"] = "Funds museum exhibitions."
     payload["prospects"][0]["grants"] = []
     raw = json.dumps(payload)
-    monkeypatch.setattr(pipeline, "_invoke_graph", lambda task, request: asyncio.sleep(0, result=fake_graph_result(raw)))
+    monkeypatch.setattr(pipeline, "_invoke_graph", lambda task, request, on_progress=None: asyncio.sleep(0, result=fake_graph_result(raw)))
     with pytest.raises(RuntimeError, match="failed closed"):
         await pipeline.run(REQUEST)
 
@@ -161,7 +161,7 @@ async def test_malformed_output_gets_exactly_one_bounded_repair(monkeypatch):
     pipeline = ResearchPipeline()
     monkeypatch.setenv("DEMO_MODE", "false")
     mock_context(monkeypatch, pipeline)
-    monkeypatch.setattr(pipeline, "_invoke_graph", lambda task, request: asyncio.sleep(0, result=fake_graph_result("not-json")))
+    monkeypatch.setattr(pipeline, "_invoke_graph", lambda task, request, on_progress=None: asyncio.sleep(0, result=fake_graph_result("not-json")))
     calls = 0
 
     async def repair(raw, error):
@@ -194,12 +194,38 @@ async def test_graph_model_timeout_is_bounded(monkeypatch):
     monkeypatch.setenv("RESEARCH_GRAPH_TIMEOUT_SECONDS", "0.05")
 
     class StalledGraph:
-        async def invoke_async(self, *args, **kwargs):
+        async def stream_async(self, *args, **kwargs):
             await asyncio.sleep(1)
+            yield {"type": "multiagent_result", "result": None}
 
     monkeypatch.setattr(pipeline, "build_strands_graph", lambda: StalledGraph())
     with pytest.raises(asyncio.TimeoutError):
         await pipeline._invoke_graph("test", REQUEST)
+
+
+@pytest.mark.asyncio
+async def test_invoke_graph_reports_each_node_completion_as_it_happens(monkeypatch):
+    pipeline = ResearchPipeline()
+
+    class FakeStreamingGraph:
+        async def stream_async(self, *args, **kwargs):
+            for node_id in ["campaign_analyst", "evidence_researcher", "people_researcher", "synthesizer"]:
+                yield {"type": "multiagent_node_start", "node_id": node_id}
+                yield {"type": "multiagent_node_stop", "node_id": node_id}
+            yield {"type": "multiagent_result", "result": "the-graph-result"}
+
+    monkeypatch.setattr(pipeline, "build_strands_graph", lambda: FakeStreamingGraph())
+    progress_calls = []
+
+    async def on_progress(node, status, message):
+        progress_calls.append((node, status, message))
+
+    result = await pipeline._invoke_graph("test", REQUEST, on_progress)
+
+    assert result == "the-graph-result"
+    assert [call[0] for call in progress_calls] == ["campaign_analyst", "evidence_researcher", "people_researcher", "synthesizer"]
+    assert all(call[1] == "completed" for call in progress_calls)
+    assert dict((call[0], call[2]) for call in progress_calls)["evidence_researcher"] == "Verifying funders and grants."
 
 
 @pytest.mark.asyncio
