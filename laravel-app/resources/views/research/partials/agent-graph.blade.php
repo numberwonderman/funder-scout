@@ -25,7 +25,7 @@
     $summary = collect($nodeOrder)->map(fn ($node) => $nodeMeta[$node]['label'].' '.$nodeStatus($node))->implode(', ');
 @endphp
 <div class="agent-graph" role="img" aria-label="Strands agent graph progress: {{ $summary }}">
-    <svg viewBox="0 0 460 210" preserveAspectRatio="xMidYMid meet">
+    <svg viewBox="0 0 460 222" preserveAspectRatio="xMidYMid meet">
         @foreach ($edgeList as [$from, $to])
             @php $a = $nodeMeta[$from]; $b = $nodeMeta[$to]; @endphp
             <line class="graph-edge is-{{ $edgeStatus($from, $to) }}" x1="{{ $a['x'] }}" y1="{{ $a['y'] }}" x2="{{ $b['x'] }}" y2="{{ $b['y'] }}" />
